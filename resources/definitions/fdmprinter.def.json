@@ -1063,7 +1063,7 @@
                             "minimum_value_warning": "1",
                             "maximum_value_warning": "10",
                             "type": "int",
-                            "value": "1 if magic_spiralize else max(1, round((wall_thickness - wall_line_width_0) / wall_line_width_x) + 1) if wall_thickness != 0 else 0",
+                            "value": "1 if magic_spiralize else max(1, round((wall_thickness - wall_line_width_0) / wall_line_width_x) + 1) if wall_thickness != 0 and not infill_mesh else 0",
                             "limit_to_extruder": "wall_x_extruder_nr",
                             "settable_per_mesh": true
                         }
@@ -1158,7 +1158,7 @@
                                     "maximum_value_warning": "100",
                                     "type": "int",
                                     "minimum_value_warning": "2",
-                                    "value": "0 if infill_sparse_density == 100 else math.ceil(round(top_thickness / resolveOrValue('layer_height'), 4))",
+                                    "value": "0 if infill_sparse_density == 100 or infill_mesh else math.ceil(round(top_thickness / resolveOrValue('layer_height'), 4))",
                                     "limit_to_extruder": "top_bottom_extruder_nr",
                                     "settable_per_mesh": true
                                 }
@@ -1187,7 +1187,7 @@
                                     "minimum_value_warning": "2",
                                     "default_value": 6,
                                     "type": "int",
-                                    "value": "999999 if infill_sparse_density == 100 else math.ceil(round(bottom_thickness / resolveOrValue('layer_height'), 4))",
+                                    "value": "999999 if infill_sparse_density == 100 else 0 if infill_mesh else math.ceil(round(bottom_thickness / resolveOrValue('layer_height'), 4))",
                                     "limit_to_extruder": "top_bottom_extruder_nr",
                                     "settable_per_mesh": true
                                 },
