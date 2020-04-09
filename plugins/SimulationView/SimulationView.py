@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Ultimaker B.V.
+# Copyright (c) 2020 Ultimaker B.V.
 # Cura is released under the terms of the LGPLv3 or higher.
 
 import sys
@@ -55,6 +55,8 @@ class SimulationView(CuraView):
     LAYER_VIEW_TYPE_LINE_TYPE = 1
     LAYER_VIEW_TYPE_FEEDRATE = 2
     LAYER_VIEW_TYPE_THICKNESS = 3
+
+    _no_layers_warning_preference = "view/no_layers_warning"
 
     def __init__(self, parent = None) -> None:
         super().__init__(parent)
@@ -114,8 +116,12 @@ class SimulationView(CuraView):
         self._only_show_top_layers = bool(Application.getInstance().getPreferences().getValue("view/only_show_top_layers"))
         self._compatibility_mode = self._evaluateCompatibilityMode()
 
-        self._wireprint_warning_message = Message(catalog.i18nc("@info:status", "Cura does not accurately display layers when Wire Printing is enabled"),
+        self._wireprint_warning_message = Message(catalog.i18nc("@info:status", "Cura does not accurately display layers when Wire Printing is enabled."),
                                                   title = catalog.i18nc("@info:title", "Simulation View"))
+        self._slice_first_warning_message = Message(catalog.i18nc("@info:status", "Nothing is shown because you need to slice first."), title = catalog.i18nc("@info:title", "No layers to show"),
+                                                    option_text = catalog.i18nc("@info:option_text", "Do not show this message again"), option_state = False)
+        self._slice_first_warning_message.optionToggled.connect(self._onDontAskMeAgain)
+        CuraApplication.getInstance().getPreferences().addPreference(self._no_layers_warning_preference, True)
 
         QtApplication.getInstance().engineCreatedSignal.connect(self._onEngineCreated)
 
@@ -147,6 +153,7 @@ class SimulationView(CuraView):
         if self._activity == activity:
             return
         self._activity = activity
+        self._updateSliceWarningVisibility()
         self.activityChanged.emit()
 
     def getSimulationPass(self) -> SimulationPass:
@@ -271,7 +278,6 @@ class SimulationView(CuraView):
                 self._minimum_path_num = self._current_path_num
 
             self._startUpdateTopLayers()
-
             self.currentPathNumChanged.emit()
 
     def setMinimumPath(self, value: int) -> None:
@@ -292,8 +298,9 @@ class SimulationView(CuraView):
     #
     #   \param layer_view_type integer as in SimulationView.qml and this class
     def setSimulationViewType(self, layer_view_type: int) -> None:
-        self._layer_view_type = layer_view_type
-        self.currentLayerNumChanged.emit()
+        if layer_view_type != self._layer_view_type:
+            self._layer_view_type = layer_view_type
+            self.currentLayerNumChanged.emit()
 
     ##  Return the layer view type, integer as in SimulationView.qml and this class
     def getSimulationViewType(self) -> int:
@@ -521,11 +528,13 @@ class SimulationView(CuraView):
             self._composite_pass.getLayerBindings().append("simulationview")
             self._old_composite_shader = self._composite_pass.getCompositeShader()
             self._composite_pass.setCompositeShader(self._simulationview_composite_shader)
+            self._updateSliceWarningVisibility()
 
         elif event.type == Event.ViewDeactivateEvent:
             self._controller.getScene().getRoot().childrenChanged.disconnect(self._onSceneChanged)
             Application.getInstance().getPreferences().preferenceChanged.disconnect(self._onPreferencesChanged)
             self._wireprint_warning_message.hide()
+            self._slice_first_warning_message.hide()
             Application.getInstance().globalContainerStackChanged.disconnect(self._onGlobalStackChanged)
             if self._global_container_stack:
                 self._global_container_stack.propertyChanged.disconnect(self._onPropertyChanged)
@@ -571,11 +580,12 @@ class SimulationView(CuraView):
 
     def _onCurrentLayerNumChanged(self) -> None:
         self.calculateMaxPathsOnLayer(self._current_layer_num)
+        scene = Application.getInstance().getController().getScene()
+        scene.sceneChanged.emit(scene.getRoot())
 
     def _startUpdateTopLayers(self) -> None:
         if not self._compatibility_mode:
             return
-
         if self._top_layers_job:
             self._top_layers_job.finished.disconnect(self._updateCurrentLayerMesh)
             self._top_layers_job.cancel()
@@ -637,6 +647,16 @@ class SimulationView(CuraView):
 
         self._updateWithPreferences()
 
+    def _updateSliceWarningVisibility(self):
+        if not self.getActivity()\
+                and not CuraApplication.getInstance().getPreferences().getValue("general/auto_slice")\
+                and CuraApplication.getInstance().getPreferences().getValue(self._no_layers_warning_preference):
+            self._slice_first_warning_message.show()
+        else:
+            self._slice_first_warning_message.hide()
+
+    def _onDontAskMeAgain(self, checked: bool) -> None:
+        CuraApplication.getInstance().getPreferences().setValue(self._no_layers_warning_preference, not checked)
 
 class _CreateTopLayersJob(Job):
     def __init__(self, scene: "Scene", layer_number: int, solid_layers: int) -> None:
